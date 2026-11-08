@@ -1,7 +1,7 @@
 // Browser-safe configuration only. The publishable key is intended for frontend use.
 // Never place a Supabase secret/service-role key in this file.
 const SUPABASE_URL = 'https://rafwarhtybmljuflcaex.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_8sHgcVY8jFdrRfRreNJJHw_yDo7rR2';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_8sHgcVY8jFdrRfRreNJJHw_yDo7rR_2';
 
 const RESOURCE_NAME = 'Javed';
 const HOLIDAYS = {
