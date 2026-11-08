@@ -1,37 +1,446 @@
-// Only the project URL and publishable key belong in browser code. Never put a Supabase secret/service-role key here.
+// Browser-safe configuration only. The publishable key is intended for frontend use.
+// Never place a Supabase secret/service-role key in this file.
 const SUPABASE_URL = 'https://rafwarhtybmljuflcaex.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_8sHgcVY8jFdrRfRreNJJHw_yDo7rR_2';
-const HOLIDAYS = {'2026-11-10':'Diwali – Balipratipada','2026-11-24':'Prakash Gurpurab – Sri Guru Nanak Dev','2026-12-25':'Christmas'};
-const $ = (id) => document.getElementById(id);
-let supabaseClient, currentUser, currentProfile, currentRole='user', currentRows=[], autoSaveTimer=null;
-const monthKey = () => $('month').value;
-const dateKey = (y,m,d) => `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-function dayType(date){const day=new Date(`${date}T12:00:00`).getDay();if(day===0||day===6)return 'Weekend';if(HOLIDAYS[date])return 'Holiday';return 'Working';}
-function rowClass(type){return type==='Weekend'?'weekend':type==='Holiday'?'holiday':'working';}
-function say(id,msg){$(id).textContent=msg;}
-function setSignedIn(on){$('auth-panel').classList.toggle('hidden',on);$('app-panel').classList.toggle('hidden',!on);$('session-area').innerHTML=on?'<button id="signout" class="secondary">Sign out</button>':'';if(on)$('signout').onclick=signOut;}
-async function init(){if(SUPABASE_URL.startsWith('YOUR_')||SUPABASE_PUBLISHABLE_KEY.startsWith('YOUR_')){$('setup-warning').classList.remove('hidden');return;}
-  supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-  $('login-form').addEventListener('submit',login);$('load-month').onclick=loadMonth;$('save-all').onclick=saveRows;$('export-own').onclick=exportOwn;$('invite-form').addEventListener('submit',inviteUser);$('export-form').addEventListener('submit',adminExport);$('refresh-users').onclick=loadUsers;
-  const {data:{session}}=await supabaseClient.auth.getSession();if(session)await startSession(session.user);
-  supabaseClient.auth.onAuthStateChange((_event,session)=>{if(session)startSession(session.user);else{currentUser=null;setSignedIn(false);}});
-}
-async function login(e){e.preventDefault();say('auth-message','Signing in…');const {error}=await supabaseClient.auth.signInWithPassword({email:$('email').value,password:$('password').value});say('auth-message',error?error.message:'');}
-async function signOut(){await supabaseClient.auth.signOut();setSignedIn(false);}
-async function startSession(user){currentUser=user;const {data:profile,error}=await supabaseClient.from('profiles').select('id,full_name,is_active').eq('id',user.id).single();if(error||!profile||!profile.is_active){say('auth-message','Your account is not active. Contact an administrator.');await supabaseClient.auth.signOut();return;}
-  currentProfile=profile;const {data:roleData,error:roleError}=await supabaseClient.rpc('current_user_role');if(roleError){say('auth-message','Could not verify your account permissions.');await supabaseClient.auth.signOut();return;}currentRole=roleData||'user';$('welcome').textContent=`Hello, ${profile.full_name}`;$('resource-name').textContent=profile.full_name;$('role-label').textContent=currentRole==='admin'?'Administrator':'Personal timesheet';$('admin-panel').classList.toggle('hidden',currentRole!=='admin');setSignedIn(true);await loadMonth();if(currentRole==='admin')await loadUsers();}
-function buildDates(month){const [y,m]=month.split('-').map(Number),days=new Date(y,m,0).getDate();$('day-count').textContent=days;return Array.from({length:days},(_,i)=>{const date=dateKey(y,m-1,i+1),dayName=new Date(`${date}T12:00:00`).toLocaleDateString('en-IN',{weekday:'short'}),type=dayType(date);return {work_date:date,day_name:dayName,day_type:type,task:type==='Holiday'?HOLIDAYS[date]:type==='Weekend'?'Weekend':'',hours:''};});}
-async function loadMonth(){if(!currentUser)return;const dates=buildDates(monthKey());const start=dates[0].work_date,end=dates.at(-1).work_date;const {data,error}=await supabaseClient.from('timesheets').select('id,user_id,work_date,task,hours').gte('work_date',start).lte('work_date',end).order('work_date');if(error){say('save-message',error.message);return;}const map=new Map((data||[]).map(r=>[r.work_date,r]));currentRows=dates.map(d=>({...d,...(map.get(d.work_date)||{}),task:map.has(d.work_date)?(map.get(d.work_date).task||''):d.task,hours:map.has(d.work_date)?map.get(d.work_date).hours:''}));renderRows();}
-function renderRows(){const body=$('entries');body.replaceChildren();for(const [i,r] of currentRows.entries()){const tr=document.createElement('tr');tr.className=rowClass(r.day_type);const date=document.createElement('td');date.textContent=new Date(`${r.work_date}T12:00:00`).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});const day=document.createElement('td');day.textContent=r.day_name;const type=document.createElement('td');type.textContent=r.day_type;const taskTd=document.createElement('td'),task=document.createElement('input');task.maxLength=1000;task.value=r.task||'';task.placeholder='Enter task description';task.addEventListener('input',()=>{currentRows[i].task=task.value;updateTotal();scheduleAutoSave();});taskTd.append(task);const hoursTd=document.createElement('td'),hours=document.createElement('input');hours.type='number';hours.min='0';hours.max='24';hours.step='0.25';hours.value=r.hours??'';hours.placeholder='0';hours.addEventListener('input',()=>{currentRows[i].hours=hours.value;updateTotal();scheduleAutoSave();});hoursTd.append(hours);tr.append(date,day,type,taskTd,hoursTd);body.append(tr);}updateTotal();}
-function updateTotal(){$('total-hours').textContent=currentRows.reduce((s,r)=>s+(Number(r.hours)||0),0).toFixed(2).replace(/\.00$/,'');}
-function scheduleAutoSave(){clearTimeout(autoSaveTimer);say('save-message','Unsaved changes — saving automatically…');autoSaveTimer=setTimeout(()=>saveRows(),1200);}
-async function saveRows(){if(!currentUser)return;clearTimeout(autoSaveTimer);const payload=currentRows.map(r=>({user_id:currentUser.id,work_date:r.work_date,task:(r.task||'').trim(),hours:r.hours===''||r.hours==null?null:Number(r.hours)}));if(payload.some(r=>r.hours!==null&&(!Number.isFinite(r.hours)||r.hours<0||r.hours>24))){say('save-message','Hours must be between 0 and 24.');return;}const {error}=await supabaseClient.from('timesheets').upsert(payload,{onConflict:'user_id,work_date'});say('save-message',error?`Save failed: ${error.message}`:'All entries saved successfully.');if(!error)await loadMonth();}
-function downloadWorkbook(rows,filename){const data=rows.map(r=>({'Date':r.work_date,'Resource':r.resource||currentProfile.full_name,'Task':r.task||'','Hour':r.hours??''}));const ws=XLSX.utils.json_to_sheet(data,{header:['Date','Resource','Task','Hour']});ws['!cols']=[{wch:14},{wch:22},{wch:60},{wch:10}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Timesheet');XLSX.writeFile(wb,filename);}
-function exportOwn(){downloadWorkbook(currentRows.map(r=>({...r,resource:currentProfile.full_name})),`Timesheet_${currentProfile.full_name}_${monthKey()}.xlsx`);}
-async function inviteUser(e){e.preventDefault();say('invite-message','Sending invitation…');const {data,error}=await supabaseClient.functions.invoke('admin-invite',{body:{email:$('invite-email').value.trim(),full_name:$('invite-name').value.trim()}});say('invite-message',error?`Invitation failed: ${error.message}`:(data?.message||'Invitation sent.'));if(!error){$('invite-form').reset();await loadUsers();}}
-async function adminExport(e){e.preventDefault();say('export-message','Preparing secure export…');const {data,error}=await supabaseClient.functions.invoke('admin-export',{body:{month:$('admin-month').value,user_id:$('admin-user').value}});if(error){say('export-message',`Export failed: ${error.message}`);return;}const rows=data?.rows||[];if(!rows.length){say('export-message','No entries found for this selection.');return;}const sheetRows=rows.map(r=>({'Date':r.work_date,'Resource':r.resource,'Task':r.task||'','Hour':r.hours??''}));const ws=XLSX.utils.json_to_sheet(sheetRows);ws['!cols']=[{wch:14},{wch:22},{wch:60},{wch:10}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Timesheets');XLSX.writeFile(wb,`Timesheets_${$('admin-month').value}_${$('admin-user').value==='all'?'AllUsers':'User'}.xlsx`);say('export-message',`Downloaded ${rows.length} entries.`);}
-async function loadUsers(){if(currentRole!=='admin')return;const {data,error}=await supabaseClient.from('admin_user_directory').select('id,full_name,email,is_active,role').order('full_name');if(error){say('invite-message',`Could not load users: ${error.message}`);return;}const select=$('admin-user');select.replaceChildren(new Option('All users','all'));const body=$('users-list');body.replaceChildren();for(const u of data||[]){select.add(new Option(`${u.full_name} (${u.email})`,u.id));const tr=document.createElement('tr');for(const value of [u.full_name,u.email,u.role,u.is_active?'Active':'Disabled']){const td=document.createElement('td');td.textContent=value;tr.append(td);}const actionTd=document.createElement('td'),btn=document.createElement('button');btn.className='secondary';btn.textContent=u.is_active?'Deactivate':'Reactivate';btn.disabled=u.id===currentUser.id&&!u.is_active;btn.onclick=()=>toggleUser(u.id,!u.is_active);actionTd.append(btn);const roleBtn=document.createElement('button');roleBtn.className='secondary';roleBtn.style.marginLeft='6px';roleBtn.textContent=u.role==='admin'?'Make user':'Make admin';roleBtn.onclick=()=>changeRole(u.id,u.role==='admin'?'user':'admin');actionTd.append(roleBtn);tr.append(actionTd);body.append(tr);}}
-async function toggleUser(userId,isActive){if(!confirm(`${isActive?'Reactivate':'Deactivate'} this account?`))return;const {data,error}=await supabaseClient.functions.invoke('admin-set-user-status',{body:{user_id:userId,is_active:isActive}});if(error){say('invite-message',error.message);return;}say('invite-message',data?.message||'Account status updated.');await loadUsers();}
-init();
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_8sHgcVY8jFdrRfRreNJJHw_yDo7rR2';
 
-async function changeRole(userId,role){if(!confirm(`Change this account role to ${role}?`))return;const {data,error}=await supabaseClient.functions.invoke('admin-set-role',{body:{user_id:userId,role}});say('invite-message',error?error.message:(data?.message||'Role updated.'));if(!error)await loadUsers();}
+const RESOURCE_NAME = 'Javed';
+const HOLIDAYS = {
+  '2026-11-08': 'Diwali Laxmi Pujan',
+  '2026-11-10': 'Diwali-Balipratipada',
+  '2026-11-24': 'Prakash Gurpurab Sri Guru Nanak Dev',
+  '2026-12-25': 'Christmas'
+};
+
+const $ = (id) => document.getElementById(id);
+let supabaseClient, currentUser, currentProfile, currentRole = 'user';
+let currentRows = [], autoSaveTimer = null, sessionStarting = false;
+
+const monthKey = () => $('month')?.value || new Date().toISOString().slice(0, 7);
+const dateKey = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+const isAdminPage = document.body.dataset.page === 'admin';
+
+function dayType(date) {
+  const weekday = new Date(`${date}T12:00:00`).getDay();
+  if (weekday === 0 || weekday === 6) return 'Weekend';
+  if (HOLIDAYS[date]) return 'Holiday';
+  return 'Working';
+}
+function rowClass(type) {
+  if (type === 'Weekend') return 'weekend';
+  if (type === 'Holiday') return 'holiday';
+  if (['Personal leave', 'Emergency leave', 'Paternity leave'].includes(type)) return 'leave';
+  return 'working';
+}
+function displayType(row) {
+  if (row.day_type === 'Weekend') return 'Weekend';
+  if (row.day_type === 'Holiday') return `Holiday - ${HOLIDAYS[row.work_date]}`;
+  return ['Personal leave', 'Emergency leave', 'Paternity leave'].includes(row.day_status) ? row.day_status : 'Working';
+}
+function say(id, message) {
+  const el = $(id);
+  if (el) el.textContent = message;
+}
+function setSignedIn(on) {
+  $('auth-panel')?.classList.toggle('hidden', on);
+  $('app-panel')?.classList.toggle('hidden', !on);
+  $('admin-page-panel')?.classList.toggle('hidden', !on || currentRole !== 'admin');
+  const sessionArea = $('session-area');
+  if (sessionArea) {
+    sessionArea.replaceChildren();
+    if (on) {
+      const btn = document.createElement('button');
+      btn.className = 'secondary';
+      btn.textContent = 'Sign out';
+      btn.onclick = signOut;
+      sessionArea.append(btn);
+    }
+  }
+}
+async function init() {
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_') || SUPABASE_PUBLISHABLE_KEY.includes('YOUR_')) {
+    $('setup-warning')?.classList.remove('hidden');
+    return;
+  }
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+  });
+
+  $('login-form')?.addEventListener('submit', login);
+  $('load-month')?.addEventListener('click', loadMonth);
+  $('save-all')?.addEventListener('click', saveRows);
+  $('export-own')?.addEventListener('click', exportOwn);
+  $('invite-form')?.addEventListener('submit', inviteUser);
+  $('export-form')?.addEventListener('submit', adminExport);
+  $('refresh-users')?.addEventListener('click', loadUsers);
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) await startSession(session.user);
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
+    if (session) startSession(session.user);
+    else {
+      currentUser = null;
+      currentProfile = null;
+      currentRole = 'user';
+      setSignedIn(false);
+    }
+  });
+}
+async function login(event) {
+  event.preventDefault();
+  say('auth-message', 'Signing in…');
+  const { error } = await supabaseClient.auth.signInWithPassword({
+    email: $('email').value.trim(),
+    password: $('password').value
+  });
+  say('auth-message', error ? error.message : 'Signed in. Loading your timesheet…');
+}
+async function signOut() {
+  await supabaseClient.auth.signOut();
+  window.location.href = 'index.html';
+}
+async function startSession(user) {
+  if (sessionStarting) return;
+  sessionStarting = true;
+  try {
+    currentUser = user;
+    const { data: profile, error } = await supabaseClient.from('profiles')
+      .select('id,full_name,is_active').eq('id', user.id).single();
+    if (error || !profile || !profile.is_active) {
+      say('auth-message', 'Your account is not active. Contact an administrator.');
+      await supabaseClient.auth.signOut();
+      return;
+    }
+    currentProfile = profile;
+    const { data: roleData, error: roleError } = await supabaseClient.rpc('current_user_role');
+    if (roleError) {
+      say('auth-message', 'Could not verify your account permissions.');
+      await supabaseClient.auth.signOut();
+      return;
+    }
+    currentRole = roleData || 'user';
+    setSignedIn(true);
+
+    if (isAdminPage && currentRole !== 'admin') {
+      $('admin-denied')?.classList.remove('hidden');
+      return;
+    }
+
+    $('welcome') && ($('welcome').textContent = `Hello, ${RESOURCE_NAME}`);
+    $('resource-name') && ($('resource-name').textContent = RESOURCE_NAME);
+    $('role-label') && ($('role-label').textContent = currentRole === 'admin' ? 'Administrator' : 'Personal timesheet');
+    $('admin-settings-link')?.classList.toggle('hidden', currentRole !== 'admin');
+    if (isAdminPage) {
+      $('admin-page-title').textContent = 'Admin Settings';
+      $('admin-page-user').textContent = `Signed in as ${RESOURCE_NAME}`;
+      $('admin-month').value = new Date().toISOString().slice(0, 7);
+      $('app-panel')?.classList.add('hidden');
+      $('admin-page-panel')?.classList.remove('hidden');
+      await loadUsers();
+    } else {
+      $('month').value = $('month').value || new Date().toISOString().slice(0, 7);
+      await loadMonth();
+    }
+  } finally {
+    sessionStarting = false;
+  }
+}
+function buildDates(month) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  const totalDays = new Date(year, monthNumber, 0).getDate();
+  return Array.from({ length: totalDays }, (_, index) => {
+    const date = dateKey(year, monthNumber - 1, index + 1);
+    const dayTypeValue = dayType(date);
+    return {
+      work_date: date,
+      day_name: new Date(`${date}T12:00:00`).toLocaleDateString('en-IN', { weekday: 'short' }),
+      day_type: dayTypeValue,
+      day_status: 'Working',
+      task: '',
+      hours: ''
+    };
+  });
+}
+async function loadMonth() {
+  if (!currentUser || !$('month')) return;
+  const dates = buildDates(monthKey());
+  const { data, error } = await supabaseClient.from('timesheets')
+    .select('id,user_id,work_date,task,hours,day_status')
+    .gte('work_date', dates[0].work_date)
+    .lte('work_date', dates[dates.length - 1].work_date)
+    .order('work_date');
+  if (error) {
+    say('save-message', `Could not load timesheet: ${error.message}`);
+    return;
+  }
+  const saved = new Map((data || []).map(row => [row.work_date, row]));
+  currentRows = dates.map(dateRow => {
+    const existing = saved.get(dateRow.work_date);
+    return {
+      ...dateRow,
+      ...(existing || {}),
+      day_status: dateRow.day_type === 'Working' && ['Personal leave', 'Emergency leave', 'Paternity leave'].includes(existing?.day_status) ? existing.day_status : 'Working',
+      task: existing ? (existing.task || '') : dateRow.task,
+      hours: existing?.hours ?? ''
+    };
+  });
+  renderRows();
+}
+function renderRows() {
+  const body = $('entries');
+  if (!body) return;
+  body.replaceChildren();
+  currentRows.forEach((row, index) => {
+    const tr = document.createElement('tr');
+    tr.className = rowClass(row.day_type === 'Working' ? row.day_status : row.day_type);
+
+    const dateCell = document.createElement('td');
+    dateCell.textContent = new Date(`${row.work_date}T12:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const dayCell = document.createElement('td');
+    dayCell.textContent = row.day_name;
+    const typeCell = document.createElement('td');
+
+    if (row.day_type === 'Working') {
+      const status = document.createElement('select');
+      status.setAttribute('aria-label', `Day status for ${row.work_date}`);
+      for (const value of ['Working', 'Personal leave', 'Emergency leave', 'Paternity leave']) status.add(new Option(value, value));
+      status.value = row.day_status;
+      status.addEventListener('change', () => {
+        currentRows[index].day_status = status.value;
+        tr.className = rowClass(status.value);
+        updateKPIs();
+        scheduleAutoSave();
+      });
+      typeCell.append(status);
+    } else {
+      typeCell.textContent = displayType(row);
+    }
+
+    const taskCell = document.createElement('td');
+    const taskInput = document.createElement('input');
+    taskInput.maxLength = 1000;
+    taskInput.value = row.task || '';
+    taskInput.placeholder = 'Enter task description';
+    taskInput.addEventListener('input', () => {
+      currentRows[index].task = taskInput.value;
+      scheduleAutoSave();
+    });
+    taskCell.append(taskInput);
+
+    const hoursCell = document.createElement('td');
+    const hoursInput = document.createElement('input');
+    hoursInput.type = 'number';
+    hoursInput.min = '0';
+    hoursInput.max = '24';
+    hoursInput.step = '0.25';
+    hoursInput.value = row.hours ?? '';
+    hoursInput.placeholder = '0';
+    hoursInput.addEventListener('input', () => {
+      currentRows[index].hours = hoursInput.value;
+      updateKPIs();
+      scheduleAutoSave();
+    });
+    hoursCell.append(hoursInput);
+    tr.append(dateCell, dayCell, typeCell, taskCell, hoursCell);
+    body.append(tr);
+  });
+  updateKPIs();
+}
+function updateKPIs() {
+  const total = currentRows.reduce((sum, row) => sum + (Number(row.hours) || 0), 0);
+  const [year, monthNumber] = monthKey().split('-').map(Number);
+  const totalDays = new Date(year, monthNumber, 0).getDate();
+  // Scheduled working days exclude only Saturdays, Sundays and public holidays.
+  // Leave is reported separately and does not reduce the monthly hours target.
+  const workingDays = currentRows.filter(row => row.day_type === 'Working').length;
+  const monthlyTarget = workingDays * 8;
+  const holidays = currentRows.filter(row => row.day_type === 'Holiday');
+  const leaveDays = currentRows.filter(row => row.day_type === 'Working' && ['Personal leave', 'Emergency leave', 'Paternity leave'].includes(row.day_status)).length;
+  $('total-hours').textContent = `${formatHours(total)} / ${monthlyTarget}`;
+  $('hours-target-note').textContent = `Target: ${workingDays} working days × 8 hours`;
+  $('holiday-count').textContent = String(holidays.length);
+  $('holiday-dates').textContent = holidays.map(row => {
+    const date = new Date(`${row.work_date}T12:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    return `${date} - ${HOLIDAYS[row.work_date]}`;
+  }).join(', ') || 'No holidays';
+  $('working-days').textContent = `${workingDays} / ${totalDays}`;
+  $('leave-count').textContent = String(leaveDays);
+  $('leave-types').textContent = leaveDays ? currentRows.filter(row => row.day_type === 'Working' && ['Personal leave', 'Emergency leave', 'Paternity leave'].includes(row.day_status)).map(row => `${new Date(`${row.work_date}T12:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} - ${row.day_status}`).join(', ') : 'No leaves';
+  $('resource-name').textContent = RESOURCE_NAME;
+}
+function formatHours(value) {
+  return Number(value.toFixed(2)).toString();
+}
+function scheduleAutoSave() {
+  clearTimeout(autoSaveTimer);
+  say('save-message', 'Unsaved changes — saving automatically…');
+  autoSaveTimer = setTimeout(saveRows, 1200);
+}
+async function saveRows() {
+  if (!currentUser) return;
+  clearTimeout(autoSaveTimer);
+  const payload = currentRows.map(row => ({
+    user_id: currentUser.id,
+    work_date: row.work_date,
+    task: (row.task || '').trim(),
+    hours: row.hours === '' || row.hours == null ? null : Number(row.hours),
+    day_status: row.day_type === 'Working' ? row.day_status : 'Working'
+  }));
+  if (payload.some(row => row.hours !== null && (!Number.isFinite(row.hours) || row.hours < 0 || row.hours > 24))) {
+    say('save-message', 'Hours must be between 0 and 24.');
+    return;
+  }
+  const { error } = await supabaseClient.from('timesheets').upsert(payload, { onConflict: 'user_id,work_date' });
+  say('save-message', error ? `Save failed: ${error.message}` : 'All entries saved successfully.');
+  if (!error) await loadMonth();
+}
+function exportRowsToExcel(rows, filename, sheetName = 'Timesheet') {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
+  worksheet.columns = [
+    { header: 'Date', key: 'date', width: 16 },
+    { header: 'Resource', key: 'resource', width: 20 },
+    { header: 'Task', key: 'task', width: 58 },
+    { header: 'Hour', key: 'hours', width: 12 }
+  ];
+  worksheet.getRow(1).height = 24;
+  worksheet.getRow(1).eachCell(cell => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF102B50' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.border = { bottom: { style: 'thin', color: { argb: 'FFCBD6E2' } } };
+  });
+
+  let totalHours = 0;
+  rows.forEach(row => {
+    const type = row.day_type || dayType(row.work_date);
+    const holidayName = HOLIDAYS[row.work_date];
+    const leaveType = ['Personal leave', 'Emergency leave', 'Paternity leave'].includes(row.day_status) ? row.day_status : '';
+    const taskText = type === 'Holiday' ? (row.task ? `${row.task} (Holiday - ${holidayName})` : `Holiday - ${holidayName}`) : type === 'Weekend' ? (row.task || 'Weekend') : leaveType ? (row.task ? `${row.task} (${leaveType})` : leaveType) : (row.task || '');
+    const excelRow = worksheet.addRow({
+      date: new Date(`${row.work_date}T12:00:00`),
+      resource: RESOURCE_NAME,
+      task: taskText,
+      hours: row.hours === '' || row.hours == null ? null : Number(row.hours)
+    });
+    excelRow.getCell(1).numFmt = 'dd-mmm-yyyy';
+    excelRow.getCell(4).numFmt = '0.00';
+    totalHours += Number(row.hours) || 0;
+    const fill = type === 'Weekend' ? 'FFEAF0F7' : type === 'Holiday' ? 'FFFFF0C2' : ['Personal leave', 'Emergency leave', 'Paternity leave'].includes(row.day_status) ? 'FFFBE5E7' : 'FFFFFFFF';
+    excelRow.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+      cell.alignment = { vertical: 'top', wrapText: true };
+      cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4EAF1' } } };
+    });
+  });
+
+  const totalRow = worksheet.addRow({ date: '', resource: '', task: 'TOTAL HOURS', hours: totalHours });
+  totalRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF102B50' } };
+  totalRow.getCell(4).numFmt = '0.00';
+  totalRow.eachCell(cell => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.alignment = { vertical: 'middle' };
+  });
+  totalRow.height = 22;
+  worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+  worksheet.autoFilter = { from: 'A1', to: `D${Math.max(1, rows.length + 1)}` };
+
+  return workbook.xlsx.writeBuffer().then(buffer => {
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  });
+}
+async function exportOwn() {
+  const filename = `Timesheet_${RESOURCE_NAME}_${monthKey()}.xlsx`;
+  await exportRowsToExcel(currentRows, filename);
+}
+async function inviteUser(event) {
+  event.preventDefault();
+  say('invite-message', 'Sending invitation…');
+  const { data, error } = await supabaseClient.functions.invoke('admin-invite', {
+    body: { email: $('invite-email').value.trim(), full_name: $('invite-name').value.trim() }
+  });
+  say('invite-message', error ? `Invitation failed: ${error.message}` : (data?.message || 'Invitation sent.'));
+  if (!error) {
+    $('invite-form').reset();
+    await loadUsers();
+  }
+}
+async function adminExport(event) {
+  event.preventDefault();
+  say('export-message', 'Preparing secure export…');
+  const { data, error } = await supabaseClient.functions.invoke('admin-export', {
+    body: { month: $('admin-month').value, user_id: $('admin-user').value }
+  });
+  if (error) {
+    say('export-message', `Export failed: ${error.message}`);
+    return;
+  }
+  const rows = (data?.rows || []).map(row => ({ ...row, day_type: dayType(row.work_date), day_status: row.day_status || 'Working' }));
+  if (!rows.length) {
+    say('export-message', 'No entries found for this selection.');
+    return;
+  }
+  await exportRowsToExcel(rows, `Timesheets_${$('admin-month').value}_${$('admin-user').value === 'all' ? 'AllUsers' : 'User'}.xlsx`, 'Timesheets');
+  say('export-message', `Downloaded ${rows.length} entries.`);
+}
+async function loadUsers() {
+  if (currentRole !== 'admin') return;
+  const { data, error } = await supabaseClient.from('admin_user_directory')
+    .select('id,full_name,email,is_active,role').order('full_name');
+  if (error) {
+    say('invite-message', `Could not load users: ${error.message}`);
+    return;
+  }
+  const select = $('admin-user');
+  if (select) {
+    select.replaceChildren(new Option('All users', 'all'));
+  }
+  const body = $('users-list');
+  if (!body) return;
+  body.replaceChildren();
+  for (const user of data || []) {
+    if (select) select.add(new Option(`${user.full_name} (${user.email})`, user.id));
+    const tr = document.createElement('tr');
+    for (const value of [user.full_name, user.email, user.role, user.is_active ? 'Active' : 'Disabled']) {
+      const td = document.createElement('td');
+      td.textContent = value;
+      tr.append(td);
+    }
+    const actions = document.createElement('td');
+    const statusButton = document.createElement('button');
+    statusButton.className = 'secondary';
+    statusButton.textContent = user.is_active ? 'Deactivate' : 'Reactivate';
+    statusButton.disabled = user.id === currentUser.id && !user.is_active;
+    statusButton.onclick = () => toggleUser(user.id, !user.is_active);
+    actions.append(statusButton);
+    const roleButton = document.createElement('button');
+    roleButton.className = 'secondary';
+    roleButton.style.marginLeft = '6px';
+    roleButton.textContent = user.role === 'admin' ? 'Make user' : 'Make admin';
+    roleButton.onclick = () => changeRole(user.id, user.role === 'admin' ? 'user' : 'admin');
+    actions.append(roleButton);
+    tr.append(actions);
+    body.append(tr);
+  }
+}
+async function toggleUser(userId, isActive) {
+  if (!confirm(`${isActive ? 'Reactivate' : 'Deactivate'} this account?`)) return;
+  const { data, error } = await supabaseClient.functions.invoke('admin-set-user-status', { body: { user_id: userId, is_active: isActive } });
+  if (error) { say('invite-message', error.message); return; }
+  say('invite-message', data?.message || 'Account status updated.');
+  await loadUsers();
+}
+async function changeRole(userId, role) {
+  if (!confirm(`Change this account role to ${role}?`)) return;
+  const { data, error } = await supabaseClient.functions.invoke('admin-set-role', { body: { user_id: userId, role } });
+  say('invite-message', error ? error.message : (data?.message || 'Role updated.'));
+  if (!error) await loadUsers();
+}
+
+init();

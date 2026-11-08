@@ -135,7 +135,7 @@ const service = secretKeys.default;
 
     let query = admin
       .from("timesheets")
-      .select("work_date, task, hours, user_id")
+      .select("work_date, task, hours, day_status, user_id")
       .gte("work_date", start)
       .lte("work_date", end)
       .order("work_date");
@@ -175,6 +175,7 @@ const service = secretKeys.default;
       resource: names.get(row.user_id) || "Unknown",
       task: row.task,
       hours: row.hours,
+      day_status: row.day_status || "Working",
     }));
 
     // Record export in audit log.

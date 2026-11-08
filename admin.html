@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Admin Settings | Javed Timesheet</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+</head>
+<body data-page="admin">
+<header>
+  <div class="brand"><span class="mark">JT</span><div><b>Javed Timesheet</b><small>Administrator settings</small></div></div>
+  <div class="header-actions"><a class="button-link" href="index.html">Back to Timesheet</a><div id="session-area"></div></div>
+</header>
+<main>
+  <section id="setup-warning" class="panel hidden"><h2>Setup required</h2><p>Check the Supabase configuration in <code>app.js</code>.</p></section>
+  <section id="auth-panel" class="panel auth-panel">
+    <h1>Administrator sign in</h1><p>Sign in with your administrator account.</p>
+    <form id="login-form">
+      <label>Email<input id="email" type="email" autocomplete="username" required></label>
+      <label>Password<input id="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit">Sign in</button>
+    </form>
+    <p id="auth-message" class="message" aria-live="polite"></p>
+  </section>
+  <section id="admin-denied" class="panel hidden"><h2>Access restricted</h2><p>Administrator access is required to open Admin Settings.</p><a class="button-link secondary-link" href="index.html">Back to Timesheet</a></section>
+  <section id="admin-page-panel" class="hidden">
+    <div class="panel toolbar">
+      <div><h1 id="admin-page-title">Admin Settings</h1><p id="admin-page-user" class="muted"></p></div>
+      <a class="button-link secondary-link" href="index.html">Back to Timesheet</a>
+    </div>
+    <p id="admin-access-message" class="message" aria-live="polite"></p>
+    <div class="panel">
+      <div class="section-heading"><div><h2>User management</h2><p class="muted">Invite users and manage account access.</p></div><button id="refresh-users" class="secondary">Refresh users</button></div>
+      <div class="admin-grid">
+        <form id="invite-form"><h3>Invite user</h3><label>Full name<input id="invite-name" required maxlength="100"></label><label>Email<input id="invite-email" type="email" required></label><button type="submit">Send invitation</button><p id="invite-message" class="message"></p></form>
+        <form id="export-form"><h3>Timesheet export</h3><label>Month<input id="admin-month" type="month" required></label><label>User<select id="admin-user"><option value="all">All users</option></select></label><button type="submit">Download Excel</button><p id="export-message" class="message"></p></form>
+      </div>
+      <div class="section-heading"><h3>User accounts</h3></div>
+      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody id="users-list"></tbody></table></div>
+    </div>
+  </section>
+</main>
+<footer>Administrator settings · Changes are checked by protected Supabase functions.</footer>
+<script src="app.js"></script>
+</body></html>
