@@ -334,13 +334,19 @@ function exportRowsToExcel(rows, filename, sheetName = 'Timesheet') {
   });
 
   const totalRow = worksheet.addRow({ date: '', resource: '', task: 'TOTAL HOURS', hours: totalHours });
-  totalRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF102B50' } };
-  totalRow.getCell(4).numFmt = '0.00';
-  totalRow.eachCell(cell => {
+  const totalRowNumber = totalRow.number;
+  // Merge only the label area (A:C); keep the total in D.
+  worksheet.mergeCells(`A${totalRowNumber}:C${totalRowNumber}`);
+  worksheet.getCell(`A${totalRowNumber}`).value = 'TOTAL HOURS';
+  worksheet.getCell(`D${totalRowNumber}`).value = totalHours;
+  worksheet.getCell(`D${totalRowNumber}`).numFmt = '0.00';
+  // Apply the navy total styling only to the four exported columns (A:D).
+  for (let column = 1; column <= 4; column++) {
+    const cell = totalRow.getCell(column);
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF102B50' } };
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    cell.alignment = { vertical: 'middle' };
-  });
+    cell.alignment = { vertical: 'middle', horizontal: column === 4 ? 'right' : 'center' };
+  }
   totalRow.height = 22;
   worksheet.views = [{ state: 'frozen', ySplit: 1 }];
   worksheet.autoFilter = { from: 'A1', to: `D${Math.max(1, rows.length + 1)}` };
