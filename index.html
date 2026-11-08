@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Javed Timesheet</title><link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+<header><div class="brand"><span class="mark">JT</span><div><b>Javed Timesheet</b><small>Monthly work log</small></div></div><div id="session-area"></div></header>
+<main>
+  <section id="setup-warning" class="panel hidden"><h2>Setup required</h2><p>Open <code>app.js</code> and add your Supabase Project URL and publishable key. Never add a secret key here.</p></section>
+  <section id="auth-panel" class="panel auth-panel">
+    <h1>Sign in</h1><p>Use the email address invited by your administrator.</p>
+    <form id="login-form"><label>Email<input id="email" type="email" autocomplete="username" required></label><label>Password<input id="password" type="password" autocomplete="current-password" required></label><button>Sign in</button></form>
+    <p id="auth-message" class="message" aria-live="polite"></p>
+  </section>
+  <section id="app-panel" class="hidden">
+    <div class="panel toolbar"><div><h1 id="welcome">Timesheet</h1><p id="role-label" class="muted"></p></div><div class="filters"><label>Month<input id="month" type="month" value="2026-11"></label><button id="load-month" class="secondary">Load month</button></div></div>
+    <div class="stats"><div class="stat"><small>MONTHLY HOURS</small><strong id="total-hours">0</strong></div><div class="stat"><small>RESOURCE</small><strong id="resource-name">—</strong></div><div class="stat"><small>MONTH DAYS</small><strong id="day-count">30</strong></div></div>
+    <div class="panel"><div class="section-heading"><div><h2>Daily entries</h2><p class="muted">One entry per date. Weekends and holidays are automatically classified.</p></div><div class="actions"><button id="save-all">Save changes</button><button id="export-own" class="secondary">Download my Excel</button></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Day</th><th>Type</th><th>Task</th><th>Hours</th></tr></thead><tbody id="entries"></tbody></table></div><p id="save-message" class="message" aria-live="polite"></p>
+    </div>
+    <section id="admin-panel" class="panel hidden"><div class="section-heading"><div><h2>Admin dashboard</h2><p class="muted">Manage invitations and export team timesheets.</p></div></div>
+      <div class="admin-grid"><form id="invite-form"><h3>Invite user</h3><label>Full name<input id="invite-name" required maxlength="100"></label><label>Email<input id="invite-email" type="email" required></label><button>Send invitation</button><p id="invite-message" class="message"></p></form>
+      <form id="export-form"><h3>Team Excel export</h3><label>Month<input id="admin-month" type="month" value="2026-11" required></label><label>User<select id="admin-user"><option value="all">All users</option></select></label><button>Download Excel</button><p id="export-message" class="message"></p></form></div>
+      <div class="section-heading"><h3>User accounts</h3><button id="refresh-users" class="secondary">Refresh list</button></div><div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Action</th></tr></thead><tbody id="users-list"></tbody></table></div>
+    </section>
+  </section>
+</main><footer>Private timesheet portal · Access is enforced by Supabase authentication and database policies.</footer>
+<script src="app.js"></script>
+</body></html>

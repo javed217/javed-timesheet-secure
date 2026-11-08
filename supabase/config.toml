@@ -1,0 +1,13 @@
+project_id = "YOUR_SUPABASE_PROJECT_REF"
+
+[functions.admin-invite]
+verify_jwt = true
+
+[functions.admin-export]
+verify_jwt = true
+
+[functions.admin-set-user-status]
+verify_jwt = true
+
+[functions.admin-set-role]
+verify_jwt = true
