@@ -5,13 +5,14 @@
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>Javed Timesheet</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
 <body data-page="timesheet">
 <header>
   <div class="brand"><span class="mark">JT</span><div><b>Javed Timesheet</b><small>Monthly work log</small></div></div>
-  <div class="header-actions"><a id="admin-settings-link" class="button-link hidden" href="admin.html">Admin Settings</a><div id="session-area"></div></div>
+  <div class="header-actions"><div id="session-area"></div></div>
 </header>
 <main>
   <section id="setup-warning" class="panel hidden"><h2>Setup required</h2><p>Configure the Supabase Project URL and publishable key in <code>app.js</code>. Never add a secret key here.</p></section>
@@ -38,7 +39,7 @@
   <section id="app-panel" class="hidden">
     <div class="panel toolbar">
       <div><h1 id="welcome">Javed Timesheet</h1><p id="role-label" class="muted"></p></div>
-      <div class="filters"><label>Month<input id="month" type="month" value="2026-11"></label><button id="load-month" class="secondary">Load month</button></div>
+      <div class="filters"><label>Month<input id="month" type="month" value="2026-11"></label><label>View<select id="view-mode"><option value="table">▤ Table View</option><option value="calendar">▦ Calendar View</option></select></label></div>
     </div>
     <div class="stats">
       <div class="stat"><small>RESOURCE</small><strong id="resource-name">Javed</strong></div>
@@ -52,10 +53,12 @@
         <div><h2>Daily entries</h2><p class="muted">Weekends and public holidays are automatic. Personal, emergency and paternity leave can be selected on working days.</p></div>
         <div class="actions"><button id="save-all">Save changes</button><button id="export-own" class="secondary">Download Excel</button></div>
       </div>
-      <div class="table-wrap"><table class="timesheet-table"><thead><tr><th>Date</th><th>Day</th><th>Type</th><th>Task</th><th>Hours</th></tr></thead><tbody id="entries"></tbody></table></div>
+      <div id="table-view" class="table-wrap"><table class="timesheet-table"><thead><tr><th>Date</th><th>Day</th><th>Type</th><th>Task</th><th>Hours</th></tr></thead><tbody id="entries"></tbody></table></div>
+      <div id="calendar-view" class="hidden"><div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div><div id="calendar-grid" class="calendar-grid"></div><p class="muted calendar-help">Select a date to edit its task, hours, or leave type.</p></div>
       <p id="save-message" class="message" aria-live="polite"></p>
     </div>
   </section>
+  <dialog id="day-editor" class="day-dialog"><form method="dialog"><div class="dialog-heading"><h2 id="day-editor-title">Edit day</h2><button type="submit" class="secondary icon-button" aria-label="Close">×</button></div><p id="day-editor-kind" class="muted"></p><label id="day-editor-status-wrap">Day type<select id="day-editor-status"><option>Working</option><option>Personal leave</option><option>Emergency leave</option><option>Paternity leave</option></select></label><label>Task<input id="day-editor-task" maxlength="1000"></label><label>Hours<input id="day-editor-hours" type="number" min="0" max="24" step="0.25"></label><div class="dialog-actions"><button type="button" id="day-editor-apply">Apply changes</button><button type="submit" class="secondary">Cancel</button></div></form></dialog>
 </main>
 <footer>Javed Timesheet · Secure access through Supabase authentication and database policies.</footer>
 <script src="app.js"></script>
