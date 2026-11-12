@@ -208,7 +208,7 @@ function buildDates(month) {
       day_type: dayTypeValue,
       day_status: 'Working',
       task: '',
-      hours: ''
+      hours: 0
     };
   });
 }
@@ -232,7 +232,7 @@ async function loadMonth() {
       ...(existing || {}),
       day_status: dateRow.day_type === 'Working' && ['Personal leave', 'Emergency leave', 'Paternity leave'].includes(existing?.day_status) ? existing.day_status : 'Working',
       task: existing ? (existing.task || '') : dateRow.task,
-      hours: existing?.hours ?? ''
+      hours: existing?.hours ?? 0
     };
   });
   renderRows();
@@ -284,7 +284,7 @@ function renderRows() {
     hoursInput.min = '0';
     hoursInput.max = '24';
     hoursInput.step = '0.25';
-    hoursInput.value = row.hours ?? '';
+    hoursInput.value = String(row.hours ?? 0);
     hoursInput.placeholder = '0';
     hoursInput.addEventListener('input', () => {
       currentRows[index].hours = hoursInput.value;
@@ -334,10 +334,10 @@ async function saveRows() {
     user_id: currentUser.id,
     work_date: row.work_date,
     task: (row.task || '').trim(),
-    hours: row.hours === '' || row.hours == null ? null : Number(row.hours),
+    hours: row.hours === '' || row.hours == null ? 0 : Number(row.hours),
     day_status: row.day_type === 'Working' ? row.day_status : 'Working'
   }));
-  if (payload.some(row => row.hours !== null && (!Number.isFinite(row.hours) || row.hours < 0 || row.hours > 24))) {
+  if (payload.some(row => (!Number.isFinite(row.hours) || row.hours < 0 || row.hours > 24))) {
     say('save-message', 'Hours must be between 0 and 24.');
     return;
   }
@@ -354,11 +354,18 @@ function addRowsToWorksheet(workbook, rows, sheetName = 'Timesheet', fallbackRes
     { header: 'Hour', key: 'hours', width: 12 }
   ];
   worksheet.getRow(1).height = 24;
-  worksheet.getRow(1).eachCell(cell => {
+  const cellBorder = {
+    top: { style: 'thin', color: { argb: 'FF9AA9BA' } },
+    bottom: { style: 'thin', color: { argb: 'FF9AA9BA' } },
+    left: { style: 'thin', color: { argb: 'FF9AA9BA' } },
+    right: { style: 'thin', color: { argb: 'FF9AA9BA' } }
+  };
+  const columnAlignment = ['left', 'center', 'left', 'center'];
+  worksheet.getRow(1).eachCell((cell, columnNumber) => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF102B50' } };
-    cell.alignment = { vertical: 'middle', horizontal: 'center' };
-    cell.border = { bottom: { style: 'thin', color: { argb: 'FFCBD6E2' } } };
+    cell.alignment = { vertical: 'middle', horizontal: columnAlignment[columnNumber - 1], wrapText: true };
+    cell.border = cellBorder;
   });
 
   let totalHours = 0;
@@ -371,16 +378,16 @@ function addRowsToWorksheet(workbook, rows, sheetName = 'Timesheet', fallbackRes
       date: new Date(`${row.work_date}T12:00:00`),
       resource: row.resource || fallbackResourceName,
       task: taskText,
-      hours: row.hours === '' || row.hours == null ? null : Number(row.hours)
+      hours: row.hours === '' || row.hours == null ? 0 : Number(row.hours)
     });
     excelRow.getCell(1).numFmt = 'dd-mmm-yyyy';
     excelRow.getCell(4).numFmt = '0.00';
     totalHours += Number(row.hours) || 0;
     const fill = type === 'Weekend' ? 'FFEAF0F7' : type === 'Holiday' ? 'FFFFF0C2' : ['Personal leave', 'Emergency leave', 'Paternity leave'].includes(row.day_status) ? 'FFFBE5E7' : 'FFFFFFFF';
-    excelRow.eachCell(cell => {
+    excelRow.eachCell((cell, columnNumber) => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
-      cell.alignment = { vertical: 'top', wrapText: true };
-      cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4EAF1' } } };
+      cell.alignment = { vertical: 'top', horizontal: columnAlignment[columnNumber - 1], wrapText: true };
+      cell.border = cellBorder;
     });
   });
 
@@ -394,7 +401,8 @@ function addRowsToWorksheet(workbook, rows, sheetName = 'Timesheet', fallbackRes
     const cell = totalRow.getCell(column);
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF102B50' } };
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    cell.alignment = { vertical: 'middle', horizontal: column === 4 ? 'right' : 'center' };
+    cell.alignment = { vertical: 'middle', horizontal: column === 4 ? 'center' : 'left' };
+    cell.border = cellBorder;
   }
   totalRow.height = 22;
   worksheet.views = [{ state: 'frozen', ySplit: 1 }];

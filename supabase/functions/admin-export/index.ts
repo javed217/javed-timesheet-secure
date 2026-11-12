@@ -180,7 +180,7 @@ const service = secretKeys.default;
       work_date: row.work_date,
       resource: names.get(row.user_id) || "Unknown",
       task: row.task,
-      hours: row.hours,
+      hours: row.hours ?? 0,
       day_status: row.day_status || "Working",
     }));
 
