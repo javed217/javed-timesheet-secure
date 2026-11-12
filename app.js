@@ -3,7 +3,6 @@
 const SUPABASE_URL = 'https://rafwarhtybmljuflcaex.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_8sHgcVY8jFdrRfRreNJJHw_yDo7rR_2';
 
-const RESOURCE_NAME = 'Javed';
 const HOLIDAYS = {
   '2026-11-08': 'Diwali Laxmi Pujan',
   '2026-11-10': 'Diwali-Balipratipada',
@@ -13,7 +12,7 @@ const HOLIDAYS = {
 
 const $ = (id) => document.getElementById(id);
 let supabaseClient, currentUser, currentProfile, currentRole = 'user';
-let currentRows = [], autoSaveTimer = null, sessionStarting = false;
+let currentRows = [], autoSaveTimer = null, sessionStarting = false, recoveryMode = false;
 
 const monthKey = () => $('month')?.value || new Date().toISOString().slice(0, 7);
 const dateKey = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -66,6 +65,8 @@ async function init() {
   });
 
   $('login-form')?.addEventListener('submit', login);
+  $('forgot-password')?.addEventListener('click', requestPasswordReset);
+  $('reset-password-form')?.addEventListener('submit', updatePassword);
   $('load-month')?.addEventListener('click', loadMonth);
   $('save-all')?.addEventListener('click', saveRows);
   $('export-own')?.addEventListener('click', exportOwn);
@@ -73,17 +74,26 @@ async function init() {
   $('export-form')?.addEventListener('submit', adminExport);
   $('refresh-users')?.addEventListener('click', loadUsers);
 
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if (session) await startSession(session.user);
-  supabaseClient.auth.onAuthStateChange((_event, session) => {
-    if (session) startSession(session.user);
-    else {
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY') {
+      recoveryMode = true;
+      $('auth-panel')?.classList.add('hidden');
+      $('app-panel')?.classList.add('hidden');
+      $('admin-page-panel')?.classList.add('hidden');
+      $('password-reset-panel')?.classList.remove('hidden');
+      say('reset-message', 'Enter a new password for your account.');
+      return;
+    }
+    if (session && !recoveryMode) startSession(session.user);
+    else if (!session) {
       currentUser = null;
       currentProfile = null;
       currentRole = 'user';
       setSignedIn(false);
     }
   });
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session && !recoveryMode) await startSession(session.user);
 }
 async function login(event) {
   event.preventDefault();
@@ -94,6 +104,47 @@ async function login(event) {
   });
   say('auth-message', error ? error.message : 'Signed in. Loading your timesheet…');
 }
+
+async function requestPasswordReset() {
+  const email = $('email')?.value.trim();
+  if (!email) {
+    say('auth-message', 'Enter your registered email address first.');
+    $('email')?.focus();
+    return;
+  }
+  say('auth-message', 'Sending password reset email…');
+  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
+  say('auth-message', error
+    ? `Could not send reset email: ${error.message}`
+    : 'If an account exists for this email, a password reset link has been sent. Check your inbox and spam folder.');
+}
+async function updatePassword(event) {
+  event.preventDefault();
+  const password = $('new-password')?.value || '';
+  const confirm = $('confirm-password')?.value || '';
+  if (password.length < 10) {
+    say('reset-message', 'Use a password with at least 10 characters.');
+    return;
+  }
+  if (password !== confirm) {
+    say('reset-message', 'The passwords do not match.');
+    return;
+  }
+  say('reset-message', 'Updating password…');
+  const { error } = await supabaseClient.auth.updateUser({ password });
+  if (error) {
+    say('reset-message', `Password update failed: ${error.message}`);
+    return;
+  }
+  recoveryMode = false;
+  await supabaseClient.auth.signOut();
+  $('password-reset-panel')?.classList.add('hidden');
+  $('auth-panel')?.classList.remove('hidden');
+  $('reset-password-form')?.reset();
+  say('auth-message', 'Your password has been updated. Please sign in with your new password.');
+}
+
 async function signOut() {
   await supabaseClient.auth.signOut();
   window.location.href = 'index.html';
@@ -125,13 +176,14 @@ async function startSession(user) {
       return;
     }
 
-    $('welcome') && ($('welcome').textContent = `Hello, ${RESOURCE_NAME}`);
-    $('resource-name') && ($('resource-name').textContent = RESOURCE_NAME);
+    const fullName = currentProfile.full_name || user.email?.split('@')[0] || 'User';
+    $('welcome') && ($('welcome').textContent = `Hello, ${fullName}`);
+    $('resource-name') && ($('resource-name').textContent = fullName);
     $('role-label') && ($('role-label').textContent = currentRole === 'admin' ? 'Administrator' : 'Personal timesheet');
     $('admin-settings-link')?.classList.toggle('hidden', currentRole !== 'admin');
     if (isAdminPage) {
       $('admin-page-title').textContent = 'Admin Settings';
-      $('admin-page-user').textContent = `Signed in as ${RESOURCE_NAME}`;
+      $('admin-page-user').textContent = `Signed in as ${fullName}`;
       $('admin-month').value = new Date().toISOString().slice(0, 7);
       $('app-panel')?.classList.add('hidden');
       $('admin-page-panel')?.classList.remove('hidden');
@@ -265,7 +317,7 @@ function updateKPIs() {
   $('working-days').textContent = `${workingDays} / ${totalDays}`;
   $('leave-count').textContent = String(leaveDays);
   $('leave-types').textContent = leaveDays ? currentRows.filter(row => row.day_type === 'Working' && ['Personal leave', 'Emergency leave', 'Paternity leave'].includes(row.day_status)).map(row => `${new Date(`${row.work_date}T12:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} - ${row.day_status}`).join(', ') : 'No leaves';
-  $('resource-name').textContent = RESOURCE_NAME;
+  if ($('resource-name')) $('resource-name').textContent = currentProfile?.full_name || currentUser?.email?.split('@')[0] || 'User';
 }
 function formatHours(value) {
   return Number(value.toFixed(2)).toString();
@@ -293,7 +345,7 @@ async function saveRows() {
   say('save-message', error ? `Save failed: ${error.message}` : 'All entries saved successfully.');
   if (!error) await loadMonth();
 }
-function exportRowsToExcel(rows, filename, sheetName = 'Timesheet') {
+function exportRowsToExcel(rows, filename, sheetName = 'Timesheet', fallbackResourceName = currentProfile?.full_name || currentUser?.email?.split('@')[0] || 'User') {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet(sheetName);
   worksheet.columns = [
@@ -318,7 +370,7 @@ function exportRowsToExcel(rows, filename, sheetName = 'Timesheet') {
     const taskText = type === 'Holiday' ? (row.task ? `${row.task} (Holiday - ${holidayName})` : `Holiday - ${holidayName}`) : type === 'Weekend' ? (row.task || 'Weekend') : leaveType ? (row.task ? `${row.task} (${leaveType})` : leaveType) : (row.task || '');
     const excelRow = worksheet.addRow({
       date: new Date(`${row.work_date}T12:00:00`),
-      resource: RESOURCE_NAME,
+      resource: row.resource || fallbackResourceName,
       task: taskText,
       hours: row.hours === '' || row.hours == null ? null : Number(row.hours)
     });
@@ -362,8 +414,10 @@ function exportRowsToExcel(rows, filename, sheetName = 'Timesheet') {
   });
 }
 async function exportOwn() {
-  const filename = `Timesheet_${RESOURCE_NAME}_${monthKey()}.xlsx`;
-  await exportRowsToExcel(currentRows, filename);
+  const resourceName = currentProfile?.full_name || currentUser?.email?.split('@')[0] || 'User';
+  const safeName = resourceName.replace(/[^a-z0-9_-]+/gi, '_');
+  const filename = `Timesheet_${safeName}_${monthKey()}.xlsx`;
+  await exportRowsToExcel(currentRows, filename, 'Timesheet', resourceName);
 }
 async function inviteUser(event) {
   event.preventDefault();

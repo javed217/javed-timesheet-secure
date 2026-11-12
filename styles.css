@@ -8,3 +8,5 @@
 .timesheet-table th:nth-child(5),.timesheet-table td:nth-child(5){width:16%}
 .timesheet-table td:nth-child(4) input{width:100%}
 .timesheet-table td:nth-child(5) input{width:100%}
+
+.text-button{background:transparent;color:#174b7f;padding:8px 0;margin-top:8px;text-decoration:underline;justify-content:flex-start}.text-button:hover{background:transparent;filter:none;color:#0d2e52}

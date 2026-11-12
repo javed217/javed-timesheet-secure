@@ -22,7 +22,18 @@
       <label>Password<input id="password" type="password" autocomplete="current-password" required></label>
       <button type="submit">Sign in</button>
     </form>
+    <button type="button" id="forgot-password" class="text-button">Forgot password?</button>
     <p id="auth-message" class="message" aria-live="polite"></p>
+  </section>
+  <section id="password-reset-panel" class="panel auth-panel hidden">
+    <h1>Set a new password</h1>
+    <p>Choose a new password for your account.</p>
+    <form id="reset-password-form">
+      <label>New password<input id="new-password" type="password" autocomplete="new-password" minlength="10" required></label>
+      <label>Confirm new password<input id="confirm-password" type="password" autocomplete="new-password" minlength="10" required></label>
+      <button type="submit">Update password</button>
+    </form>
+    <p id="reset-message" class="message" aria-live="polite"></p>
   </section>
   <section id="app-panel" class="hidden">
     <div class="panel toolbar">

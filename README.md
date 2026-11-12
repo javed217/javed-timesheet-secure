@@ -64,3 +64,12 @@ GitHub Pages will redeploy automatically after the commit.
 - 10-Nov-2026 — Diwali-Balipratipada.
 - 24-Nov-2026 — Prakash Gurpurab Sri Guru Nanak Dev.
 - 25-Dec-2026 — Christmas.
+
+
+## Password recovery and full-name display (November 2026 update)
+
+- Login pages include a Forgot password link. Supabase sends a recovery email; the user follows the link and sets a new password in the app.
+- The recovery redirect uses the current page URL. Ensure Supabase Authentication → URL Configuration → Redirect URLs includes `https://javed217.github.io/javed-timesheet-secure/**`.
+- The frontend reads the logged-in user's `profiles.full_name` for the greeting, resource KPI, and own Excel export. Admin exports use each row's profile full name returned by the protected `admin-export` function.
+- Existing accounts must have their actual names stored in `public.profiles.full_name`. Update those values in Supabase Table Editor → public → profiles. New invitations already capture Full name in Admin Settings.
+- Password recovery emails use the configured Supabase email provider and its sending limits.
