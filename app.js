@@ -345,8 +345,7 @@ async function saveRows() {
   say('save-message', error ? `Save failed: ${error.message}` : 'All entries saved successfully.');
   if (!error) await loadMonth();
 }
-function exportRowsToExcel(rows, filename, sheetName = 'Timesheet', fallbackResourceName = currentProfile?.full_name || currentUser?.email?.split('@')[0] || 'User') {
-  const workbook = new ExcelJS.Workbook();
+function addRowsToWorksheet(workbook, rows, sheetName = 'Timesheet', fallbackResourceName = currentProfile?.full_name || currentUser?.email?.split('@')[0] || 'User') {
   const worksheet = workbook.addWorksheet(sheetName);
   worksheet.columns = [
     { header: 'Date', key: 'date', width: 16 },
@@ -387,12 +386,10 @@ function exportRowsToExcel(rows, filename, sheetName = 'Timesheet', fallbackReso
 
   const totalRow = worksheet.addRow({ date: '', resource: '', task: 'TOTAL HOURS', hours: totalHours });
   const totalRowNumber = totalRow.number;
-  // Merge only the label area (A:C); keep the total in D.
   worksheet.mergeCells(`A${totalRowNumber}:C${totalRowNumber}`);
   worksheet.getCell(`A${totalRowNumber}`).value = 'TOTAL HOURS';
   worksheet.getCell(`D${totalRowNumber}`).value = totalHours;
   worksheet.getCell(`D${totalRowNumber}`).numFmt = '0.00';
-  // Apply the navy total styling only to the four exported columns (A:D).
   for (let column = 1; column <= 4; column++) {
     const cell = totalRow.getCell(column);
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF102B50' } };
@@ -402,7 +399,10 @@ function exportRowsToExcel(rows, filename, sheetName = 'Timesheet', fallbackReso
   totalRow.height = 22;
   worksheet.views = [{ state: 'frozen', ySplit: 1 }];
   worksheet.autoFilter = { from: 'A1', to: `D${Math.max(1, rows.length + 1)}` };
+  return worksheet;
+}
 
+function downloadWorkbook(workbook, filename) {
   return workbook.xlsx.writeBuffer().then(buffer => {
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
@@ -413,6 +413,41 @@ function exportRowsToExcel(rows, filename, sheetName = 'Timesheet', fallbackReso
     URL.revokeObjectURL(url);
   });
 }
+
+function exportRowsToExcel(rows, filename, sheetName = 'Timesheet', fallbackResourceName = currentProfile?.full_name || currentUser?.email?.split('@')[0] || 'User') {
+  const workbook = new ExcelJS.Workbook();
+  addRowsToWorksheet(workbook, rows, sheetName, fallbackResourceName);
+  return downloadWorkbook(workbook, filename);
+}
+
+function exportAllUsersToExcel(rows, users, filename) {
+  const workbook = new ExcelJS.Workbook();
+  const grouped = new Map();
+  (users || []).forEach(user => grouped.set(user.id, { name: user.full_name || 'User', rows: [] }));
+  rows.forEach(row => {
+    const key = row.user_id || row.resource || 'unknown';
+    if (!grouped.has(key)) grouped.set(key, { name: row.resource || 'User', rows: [] });
+    grouped.get(key).rows.push(row);
+  });
+
+  const usedNames = new Set();
+  for (const [key, group] of grouped.entries()) {
+    let baseName = String(group.name || 'User').replace(/[\\/*?:\[\]]/g, ' ').trim().slice(0, 31) || 'User';
+    let sheetName = baseName;
+    let suffix = 2;
+    while (usedNames.has(sheetName.toLowerCase())) {
+      const ending = ` (${suffix++})`;
+      sheetName = `${baseName.slice(0, 31 - ending.length)}${ending}`;
+    }
+    usedNames.add(sheetName.toLowerCase());
+    const userRows = group.rows.map(row => ({ ...row, day_type: row.day_type || dayType(row.work_date) }));
+    addRowsToWorksheet(workbook, userRows, sheetName, group.name);
+  }
+
+  if (!workbook.worksheets.length) addRowsToWorksheet(workbook, [], 'Timesheet');
+  return downloadWorkbook(workbook, filename);
+}
+
 async function exportOwn() {
   const resourceName = currentProfile?.full_name || currentUser?.email?.split('@')[0] || 'User';
   const safeName = resourceName.replace(/[^a-z0-9_-]+/gi, '_');
@@ -442,11 +477,22 @@ async function adminExport(event) {
     return;
   }
   const rows = (data?.rows || []).map(row => ({ ...row, day_type: dayType(row.work_date), day_status: row.day_status || 'Working' }));
+  const selectedUser = $('admin-user').value;
+  if (selectedUser === 'all') {
+    const users = data?.users || [];
+    if (!rows.length && !users.length) {
+      say('export-message', 'No users or timesheet entries found for this month.');
+      return;
+    }
+    await exportAllUsersToExcel(rows, users, `Timesheets_${$('admin-month').value}_AllUsers.xlsx`);
+    say('export-message', `Downloaded ${users.length || new Set(rows.map(row => row.resource)).size} user worksheets.`);
+    return;
+  }
   if (!rows.length) {
     say('export-message', 'No entries found for this selection.');
     return;
   }
-  await exportRowsToExcel(rows, `Timesheets_${$('admin-month').value}_${$('admin-user').value === 'all' ? 'AllUsers' : 'User'}.xlsx`, 'Timesheets');
+  await exportRowsToExcel(rows, `Timesheets_${$('admin-month').value}_User.xlsx`, rows[0]?.resource || 'Timesheet');
   say('export-message', `Downloaded ${rows.length} entries.`);
 }
 async function loadUsers() {

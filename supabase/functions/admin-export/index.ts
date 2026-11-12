@@ -155,12 +155,17 @@ const service = secretKeys.default;
       ...new Set((data || []).map((row) => row.user_id)),
     ];
 
-    const { data: profiles, error: namesError } = ids.length
-      ? await admin
-          .from("profiles")
-          .select("id, full_name")
-          .in("id", ids)
-      : { data: [], error: null };
+    // For an all-users export, include every active profile so each user
+    // receives a worksheet even when they have no entries for the month.
+    let profilesQuery = admin
+      .from("profiles")
+      .select("id, full_name");
+
+    if (targetUserId !== "all") {
+      profilesQuery = profilesQuery.in("id", ids.length ? ids : [targetUserId]);
+    }
+
+    const { data: profiles, error: namesError } = await profilesQuery.order("full_name");
 
     if (namesError) {
       return reply({ error: "Unable to retrieve resource names" }, 500);
@@ -171,6 +176,7 @@ const service = secretKeys.default;
     );
 
     const rows = (data || []).map((row) => ({
+      user_id: row.user_id,
       work_date: row.work_date,
       resource: names.get(row.user_id) || "Unknown",
       task: row.task,
@@ -196,7 +202,12 @@ const service = secretKeys.default;
       return reply({ error: "Unable to record export audit" }, 500);
     }
 
-    return reply({ rows });
+    const users = (targetUserId === "all" ? profiles || [] : []).map((profile) => ({
+      id: profile.id,
+      full_name: profile.full_name || "User",
+    }));
+
+    return reply({ rows, users });
 
   } catch (error) {
     console.error("Export function error:", error);
