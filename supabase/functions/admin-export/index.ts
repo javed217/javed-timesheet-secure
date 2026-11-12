@@ -106,22 +106,20 @@ const service = secretKeys.default;
 
     // Normal users can ONLY export their own records.
     // An admin can export one user or all users.
-    let targetUserId = user.id;
+    let targetUserIds: string[] | "all" = [user.id];
 
     if (isAdmin) {
-      const requestedId = String(body.user_id || "all");
-
-      if (requestedId === "all") {
-        targetUserId = "all";
-      } else {
-        const validUuid =
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-        if (!validUuid.test(requestedId)) {
-          return reply({ error: "Invalid user ID" }, 400);
+      const requestedIds = body.user_ids;
+      if (requestedIds === "all" || requestedIds === undefined) {
+        targetUserIds = "all";
+      } else if (Array.isArray(requestedIds) && requestedIds.length > 0 && requestedIds.length <= 500) {
+        const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!requestedIds.every((id) => typeof id === "string" && validUuid.test(id))) {
+          return reply({ error: "Invalid user ID selection" }, 400);
         }
-
-        targetUserId = requestedId;
+        targetUserIds = [...new Set(requestedIds)];
+      } else {
+        return reply({ error: "Select All users or one or more valid users" }, 400);
       }
     }
 
@@ -140,8 +138,8 @@ const service = secretKeys.default;
       .lte("work_date", end)
       .order("work_date");
 
-    if (targetUserId !== "all") {
-      query = query.eq("user_id", targetUserId);
+    if (targetUserIds !== "all") {
+      query = query.in("user_id", targetUserIds);
     }
 
     const { data, error } = await query;
@@ -161,8 +159,8 @@ const service = secretKeys.default;
       .from("profiles")
       .select("id, full_name");
 
-    if (targetUserId !== "all") {
-      profilesQuery = profilesQuery.in("id", ids.length ? ids : [targetUserId]);
+    if (targetUserIds !== "all") {
+      profilesQuery = profilesQuery.in("id", targetUserIds);
     }
 
     const { data: profiles, error: namesError } = await profilesQuery.order("full_name");
@@ -192,7 +190,7 @@ const service = secretKeys.default;
         action: isAdmin ? "admin_export" : "user_export",
         details: {
           month,
-          user_id: targetUserId,
+          user_ids: targetUserIds,
           row_count: rows.length,
         },
       });
@@ -202,7 +200,7 @@ const service = secretKeys.default;
       return reply({ error: "Unable to record export audit" }, 500);
     }
 
-    const users = (targetUserId === "all" ? profiles || [] : []).map((profile) => ({
+    const users = (profiles || []).map((profile) => ({
       id: profile.id,
       full_name: profile.full_name || "User",
     }));

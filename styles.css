@@ -10,3 +10,5 @@
 .timesheet-table td:nth-child(5) input{width:100%}
 
 .text-button{background:transparent;color:#174b7f;padding:8px 0;margin-top:8px;text-decoration:underline;justify-content:flex-start}.text-button:hover{background:transparent;filter:none;color:#0d2e52}
+
+.export-user-picker{border:1px solid #cbd6e2;border-radius:8px;padding:12px;display:grid;gap:8px}.export-user-picker legend{font-size:13px;font-weight:700;color:#42556d;padding:0 5px}.export-user-list{max-height:180px;overflow:auto;display:grid;gap:7px;padding:7px;background:#fff;border:1px solid #e0e7ef;border-radius:7px}.check-option{display:flex;align-items:center;gap:8px;font-weight:500}.check-option input{width:auto;margin:0}

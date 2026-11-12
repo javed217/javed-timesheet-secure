@@ -46,7 +46,7 @@
       <div class="section-heading"><div><h2>User management</h2><p class="muted">Invite users and manage account access.</p></div><button id="refresh-users" class="secondary">Refresh users</button></div>
       <div class="admin-grid">
         <form id="invite-form"><h3>Invite user</h3><label>Full name<input id="invite-name" required maxlength="100"></label><label>Email<input id="invite-email" type="email" required></label><button type="submit">Send invitation</button><p id="invite-message" class="message"></p></form>
-        <form id="export-form"><h3>Timesheet export</h3><label>Month<input id="admin-month" type="month" required></label><label>User<select id="admin-user"><option value="all">All users</option></select></label><button type="submit">Download Excel</button><p id="export-message" class="message"></p></form>
+        <form id="export-form"><h3>Timesheet export</h3><label>Month<input id="admin-month" type="month" required></label><fieldset class="export-user-picker"><legend>Select users</legend><label class="check-option"><input type="checkbox" id="export-all-users" checked> All users</label><div id="export-user-list" class="export-user-list"><p class="muted">User list will load here.</p></div><small>Select All users or tick one or more individual users.</small></fieldset><button type="submit">Download Excel</button><p id="export-message" class="message"></p></form>
       </div>
       <div class="section-heading"><h3>User accounts</h3></div>
       <div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody id="users-list"></tbody></table></div>

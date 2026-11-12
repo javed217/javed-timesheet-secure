@@ -72,6 +72,9 @@ async function init() {
   $('export-own')?.addEventListener('click', exportOwn);
   $('invite-form')?.addEventListener('submit', inviteUser);
   $('export-form')?.addEventListener('submit', adminExport);
+  $('export-all-users')?.addEventListener('change', (event) => {
+    document.querySelectorAll('#export-user-list input[name="export-user"]').forEach(input => { input.checked = false; input.disabled = event.target.checked; });
+  });
   $('refresh-users')?.addEventListener('click', loadUsers);
 
   supabaseClient.auth.onAuthStateChange((event, session) => {
@@ -476,32 +479,29 @@ async function inviteUser(event) {
 }
 async function adminExport(event) {
   event.preventDefault();
+  const allUsers = $('export-all-users')?.checked === true;
+  const selectedIds = [...document.querySelectorAll('#export-user-list input[name="export-user"]:checked')].map(input => input.value);
+  if (!allUsers && !selectedIds.length) {
+    say('export-message', 'Select All users or at least one user.');
+    return;
+  }
   say('export-message', 'Preparing secure export…');
   const { data, error } = await supabaseClient.functions.invoke('admin-export', {
-    body: { month: $('admin-month').value, user_id: $('admin-user').value }
+    body: { month: $('admin-month').value, user_ids: allUsers ? 'all' : selectedIds }
   });
   if (error) {
     say('export-message', `Export failed: ${error.message}`);
     return;
   }
   const rows = (data?.rows || []).map(row => ({ ...row, day_type: dayType(row.work_date), day_status: row.day_status || 'Working' }));
-  const selectedUser = $('admin-user').value;
-  if (selectedUser === 'all') {
-    const users = data?.users || [];
-    if (!rows.length && !users.length) {
-      say('export-message', 'No users or timesheet entries found for this month.');
-      return;
-    }
-    await exportAllUsersToExcel(rows, users, `Timesheets_${$('admin-month').value}_AllUsers.xlsx`);
-    say('export-message', `Downloaded ${users.length || new Set(rows.map(row => row.resource)).size} user worksheets.`);
+  const users = data?.users || [];
+  if (!users.length) {
+    say('export-message', 'No users found for this selection.');
     return;
   }
-  if (!rows.length) {
-    say('export-message', 'No entries found for this selection.');
-    return;
-  }
-  await exportRowsToExcel(rows, `Timesheets_${$('admin-month').value}_User.xlsx`, rows[0]?.resource || 'Timesheet');
-  say('export-message', `Downloaded ${rows.length} entries.`);
+  const selectionLabel = allUsers ? 'AllUsers' : (users.length === 1 ? 'SelectedUser' : 'SelectedUsers');
+  await exportAllUsersToExcel(rows, users, `Timesheets_${$('admin-month').value}_${selectionLabel}.xlsx`);
+  say('export-message', `Downloaded ${users.length} user worksheet${users.length === 1 ? '' : 's'}.`);
 }
 async function loadUsers() {
   if (currentRole !== 'admin') return;
@@ -511,15 +511,24 @@ async function loadUsers() {
     say('invite-message', `Could not load users: ${error.message}`);
     return;
   }
-  const select = $('admin-user');
-  if (select) {
-    select.replaceChildren(new Option('All users', 'all'));
-  }
+  const picker = $('export-user-list');
+  if (picker) picker.replaceChildren();
   const body = $('users-list');
   if (!body) return;
   body.replaceChildren();
   for (const user of data || []) {
-    if (select) select.add(new Option(`${user.full_name} (${user.email})`, user.id));
+    if (picker) {
+      const label = document.createElement('label');
+      label.className = 'check-option';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.name = 'export-user';
+      checkbox.value = user.id;
+      checkbox.checked = false;
+      checkbox.disabled = $('export-all-users')?.checked === true;
+      label.append(checkbox, document.createTextNode(`${user.full_name} (${user.email})`));
+      picker.append(label);
+    }
     const tr = document.createElement('tr');
     for (const value of [user.full_name, user.email, user.role, user.is_active ? 'Active' : 'Disabled']) {
       const td = document.createElement('td');
