@@ -266,6 +266,7 @@ async function loadMonth() {
   const dates = buildDates(monthKey());
   const { data, error } = await supabaseClient.from('timesheets')
     .select('id,user_id,work_date,task,hours,day_status')
+    .eq('user_id', currentUser.id)
     .gte('work_date', dates[0].work_date)
     .lte('work_date', dates[dates.length - 1].work_date)
     .order('work_date');
@@ -615,6 +616,14 @@ async function loadUsers() {
     roleButton.textContent = user.role === 'admin' ? 'Make user' : 'Make admin';
     roleButton.onclick = () => changeRole(user.id, user.role === 'admin' ? 'user' : 'admin');
     actions.append(roleButton);
+    const removeButton = document.createElement('button');
+    removeButton.className = 'danger';
+    removeButton.style.marginLeft = '6px';
+    removeButton.textContent = 'Remove user';
+    removeButton.disabled = user.id === currentUser.id;
+    removeButton.title = user.id === currentUser.id ? 'You cannot remove your own account' : 'Permanently remove this user and their timesheet data';
+    removeButton.onclick = () => removeUser(user.id, user.full_name || user.email || 'this user');
+    actions.append(removeButton);
     tr.append(actions);
     body.append(tr);
   }
@@ -632,6 +641,19 @@ async function changeRole(userId, role) {
   const { data, error } = await supabaseClient.functions.invoke('admin-set-role', { body: { user_id: userId, role } });
   say('invite-message', error ? error.message : (data?.message || 'Role updated.'));
   if (!error) await loadUsers();
+}
+
+async function removeUser(userId, userLabel) {
+  const confirmed = confirm(`Permanently remove ${userLabel}? This deletes the account and its saved timesheet records. This action cannot be undone.`);
+  if (!confirmed) return;
+  say('invite-message', `Removing ${userLabel}…`);
+  const { data, error } = await supabaseClient.functions.invoke('admin-delete-user', { body: { user_id: userId } });
+  if (error) {
+    say('invite-message', `Could not remove user: ${error.message}`);
+    return;
+  }
+  say('invite-message', data?.message || 'User permanently removed.');
+  await loadUsers();
 }
 
 

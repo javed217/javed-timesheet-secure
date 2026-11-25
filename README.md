@@ -27,9 +27,17 @@ The first migration adds `day_status`; the second expands its allowed values. Ex
 
 The original migration should not be run again on the existing project.
 
-## Deploy the updated admin export function
+## Deploy the updated admin functions
 
-The existing admin export function already returns `day_status`; no Edge Function redeployment is required for these dashboard-only KPI and leave-selector changes. Keep all existing Edge Function secrets in Supabase and never add them to this folder or GitHub.
+Deploy the new `admin-delete-user` Edge Function from `supabase/functions/admin-delete-user/` to the existing Supabase project. It uses the existing `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEYS`, and `SUPABASE_SECRET_KEYS` function secrets. The function verifies the caller is an active administrator, prevents self-removal and removal of the last active administrator, records an audit event, and permanently deletes the selected Auth account. The database foreign keys cascade that deletion to the profile, role, and timesheet rows.
+
+For example, with the Supabase CLI linked to the project, run:
+
+```sh
+supabase functions deploy admin-delete-user
+```
+
+No database migration is needed for this change. Keep all existing Edge Function secrets in Supabase and never add them to this folder or GitHub.
 
 ## Publish the updated website
 
@@ -43,6 +51,7 @@ Upload/replace these files in the root of the existing GitHub repository:
 - `supabase/migrations/202611080001_add_day_status.sql` (only if not already run)
 - `supabase/migrations/202611080002_expand_leave_types.sql`
 - `supabase/functions/admin-export/index.ts`
+- `supabase/functions/admin-delete-user/index.ts` (deploy this Edge Function to Supabase)
 
 Do not upload `node_modules`, `.git`, or `supabase/.temp`.
 
@@ -57,7 +66,8 @@ GitHub Pages will redeploy automatically after the commit.
 - Personal, emergency and paternity leave can be selected only on normal working weekdays. Leave days are counted separately and do not reduce the scheduled working-day target.
 - Excel exports contain only Date, Resource, Task and Hour, use the website row colors, keep the resource name as Javed, and include a total-hours row at the bottom.
 - Admin controls are on `admin.html`; the Admin Settings link is shown only to administrators.
-- Existing invitation, role management, activation/deactivation, and admin export functions remain in the admin page.
+- Each signed-in account loads only its own timesheet, including administrators; administrators can still use the read-only selected-user timesheet viewer.
+- Existing invitation, role management, activation/deactivation, and admin export functions remain in the admin page. Admins can permanently remove dormant accounts; removal also deletes that account’s timesheet data.
 
 ## Calendar holidays currently configured
 - 08-Nov-2026 — Diwali Laxmi Pujan (Sunday; therefore shown as Weekend).
