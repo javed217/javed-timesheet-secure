@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info, x-supabase-api-version",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -15,10 +15,12 @@ Deno.serve(async (req) => {
 
   try {
     const url = Deno.env.get("SUPABASE_URL");
+    // Support both the newer Supabase key-set secrets and the legacy project keys.
+    // The service-role/secret key is only read inside this server-side function.
     const publishableKeys = JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") || "{}");
     const secretKeys = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") || "{}");
-    const anon = publishableKeys.default;
-    const service = secretKeys.default;
+    const anon = publishableKeys.default || Deno.env.get("SUPABASE_ANON_KEY");
+    const service = secretKeys.default || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!url || !anon || !service) return reply({ error: "Server configuration is incomplete" }, 500);
 
     const authorization = req.headers.get("Authorization");

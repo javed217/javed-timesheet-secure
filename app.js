@@ -649,7 +649,18 @@ async function removeUser(userId, userLabel) {
   say('invite-message', `Removing ${userLabel}…`);
   const { data, error } = await supabaseClient.functions.invoke('admin-delete-user', { body: { user_id: userId } });
   if (error) {
-    say('invite-message', `Could not remove user: ${error.message}`);
+    // FunctionsFetchError means the browser could not reach the deployed function
+    // (commonly an undeployed function or a failed CORS preflight).
+    const detail = error.context?.message || error.message || 'Unknown network error';
+    const guidance = error.name === 'FunctionsFetchError'
+      ? ' The admin-delete-user Edge Function may not be deployed, or its CORS preflight was rejected. Deploy it with: supabase functions deploy admin-delete-user'
+      : '';
+    say('invite-message', `Could not remove user: ${detail}.${guidance}`);
+    console.error('admin-delete-user invocation failed', { name: error.name, message: error.message, context: error.context });
+    return;
+  }
+  if (data?.error) {
+    say('invite-message', `Could not remove user: ${data.error}`);
     return;
   }
   say('invite-message', data?.message || 'User permanently removed.');

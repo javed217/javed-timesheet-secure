@@ -29,13 +29,15 @@ The original migration should not be run again on the existing project.
 
 ## Deploy the updated admin functions
 
-Deploy the new `admin-delete-user` Edge Function from `supabase/functions/admin-delete-user/` to the existing Supabase project. It uses the existing `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEYS`, and `SUPABASE_SECRET_KEYS` function secrets. The function verifies the caller is an active administrator, prevents self-removal and removal of the last active administrator, records an audit event, and permanently deletes the selected Auth account. The database foreign keys cascade that deletion to the profile, role, and timesheet rows.
+Deploy the `admin-delete-user` Edge Function from `supabase/functions/admin-delete-user/` to the existing Supabase project. Updating the GitHub Pages files alone does NOT deploy an Edge Function. It supports the newer `SUPABASE_PUBLISHABLE_KEYS` / `SUPABASE_SECRET_KEYS` secrets and the legacy `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` secrets. The function verifies the caller is an active administrator, prevents self-removal and removal of the last active administrator, records an audit event, and permanently deletes the selected Auth account. The database foreign keys cascade that deletion to the profile, role, and timesheet rows.
 
 For example, with the Supabase CLI linked to the project, run:
 
 ```sh
 supabase functions deploy admin-delete-user
 ```
+
+After deployment, open Supabase Dashboard → Edge Functions and confirm `admin-delete-user` is listed and deployed. If deployment succeeds but invocation still fails, open Edge Functions → `admin-delete-user` → Logs and check the latest request. The browser error now distinguishes an unreachable function/CORS issue from a function response such as missing server secrets or insufficient admin permissions. The function CORS policy explicitly allows the `x-supabase-api-version` header used by current Supabase clients.
 
 No database migration is needed for this change. Keep all existing Edge Function secrets in Supabase and never add them to this folder or GitHub.
 
